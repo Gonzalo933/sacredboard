@@ -15,9 +15,18 @@ class FileStoreRunDAO(RunDAO):
 
     def delete(self, run_id):
         """Delete run."""
-        raise NotImplementedError("Deleting runs is not supported with the FileStore backend yet.")
+        raise NotImplementedError(
+            "Deleting runs is not supported with the FileStore backend yet."
+        )
 
-    def get_runs(self, sort_by=None, sort_direction=None, start=0, limit=None, query={"type": "and", "filters": []}):
+    def get_runs(
+        self,
+        sort_by=None,
+        sort_direction=None,
+        start=0,
+        limit=None,
+        query={"type": "and", "filters": []},
+    ):
         """
         Return all runs in the file store.
 
@@ -31,19 +40,27 @@ class FileStoreRunDAO(RunDAO):
         :return: FileStoreCursor
         """
         all_run_ids = os.listdir(self.directory)
+        all_run_ids.remove("_sources")
+        all_runs = []
+        for i in all_run_ids:
+            try:
+                all_runs.append(self.get(i))
+            except FileNotFoundError:
+                # An incomplete experiment is a corrupt experiment.
+                # Skip it for now.
+                # TODO
+                pass
+
+        if sort_by in ["_id", "result"]:
+            all_runs = sorted(
+                all_runs,
+                key=lambda x: float(x[sort_by]),
+                reverse=(sort_direction == "asc"),
+            )
 
         def run_iterator():
-            blacklist = set(["_sources"])
-            for id in all_run_ids:
-                if id in blacklist:
-                    continue
-                try:
-                    yield self.get(id)
-                except FileNotFoundError:
-                    # An incomplete experiment is a corrupt experiment.
-                    # Skip it for now.
-                    # TODO
-                    pass
+            for run in all_runs:
+                yield run
 
         count = len(all_run_ids)
         return FileStoreCursor(count, run_iterator())
@@ -75,8 +92,7 @@ def _create_run(run_id, runjson, configjson, infojson):
     # which values have type "time."
     for k in ["start_time", "stop_time", "heartbeat"]:
         if k in runjson:
-            runjson[k] = datetime.datetime.strptime(runjson[k],
-                                                    '%Y-%m-%dT%H:%M:%S.%f')
+            runjson[k] = datetime.datetime.strptime(runjson[k], "%Y-%m-%dT%H:%M:%S.%f")
     return runjson
 
 
